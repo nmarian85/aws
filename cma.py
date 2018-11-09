@@ -50,7 +50,7 @@ def get_state(object, state, component):
 			else:
 				print(id + " not " + state + " yet")
 				retval = False				
-		return True
+
 	elif (component == "cdh"):
 		for s in object.get_all_services():
 			n = s.name
@@ -74,7 +74,7 @@ def run_process(farg, action, state, component):
 	# timeout = time.time() + 10
 	while True:
 		if ((get_state(farg, state, component) == True ) or (time.time() > timeout)):
-			print "Everything ok"
+			print("Everything ok with " + component)
 			p.terminate()
 			break
 		time.sleep(10)
@@ -83,8 +83,8 @@ def run_process(farg, action, state, component):
 
 def run_aws(action, aws_st):
 	component = "aws"
-	aws_cdh_inst = ["i-0c7750a3b6cb107fa", "i-0c8199d121a0409ec", "i-0ecf8e69d51828c41", "i-0fef039957a700c95", "i-00b8e90d0b3cf58a5", "i-03821bf0a5fb2b34b", "i-03c6d6779ada0806c", "i-0e8d0ffdb9e11fe00"]
-	run_process(aws_cdh_inst, action, state, "aws")
+	aws_cdh_inst = ["i-0ecf8e69d51828c41", "i-0fef039957a700c95", "i-00b8e90d0b3cf58a5", "i-03821bf0a5fb2b34b", "i-03c6d6779ada0806c", "i-0e8d0ffdb9e11fe00", "i-0c7750a3b6cb107fa"] # last one should be cm
+	run_process(aws_cdh_inst, action, aws_st, "aws")
 
 def run_cdh(action, cdh_st):
 	component = "cdh"
@@ -109,12 +109,20 @@ def do_work(object, action, component):
 		if (action == "start"):
 			print "Starting cluster"
 			cluster.start().wait()
-		else:
+		elif (action == "stop"):
 			print "Stopping cluster"
 			cluster.stop().wait()
 	elif (component == "aws"):
-		pass
-	
+		aws_cdh_inst = object
+		if (action == "start"):
+			print "Starting AWS instances"
+			for id in aws_cdh_inst:
+				run_cmd(["aws", "--profile", "director-aws-user", "ec2", "start-instances", "--instance-ids", id])
+		elif (action == "stop"):
+			print "Stopping AWS instances"
+			for id in aws_cdh_inst:
+				run_cmd(["aws", "--profile", "director-aws-user", "ec2", "stop-instances", "--instance-ids", id])	   
+
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("action", help="stop or start the cluster")
@@ -124,17 +132,18 @@ def main():
 	if ((action != "start") and (action != "stop")):
 		print ("Action can be either start or stop")
 		sys.exit(1)
-	
+
 	if (action == "start"):
 		cdh_st = "STARTED"
 		aws_st = "running"
-		# run_aws(aws_st, "aws")
+		run_aws(action, aws_st)
+		time.sleep(300)
 		run_cdh(action, cdh_st)
-	else:
+	elif (action == "stop"):
 		cdh_st = "STOPPED"
 		aws_st = "stopped"
 		run_cdh(action, cdh_st)
-		# run_aws(aws_st, "aws")
+		run_aws(action, aws_st)
 		
 if __name__ == "__main__":
 	main()
