@@ -18,17 +18,19 @@ import csv
 import json
 import re
 import pprint
+import logging
+import logging.config
 
-def run_cmd(cmd):
+def run_cmd(cmd, logger):
 	try:
 		p = sp.Popen(cmd, stdout = sp.PIPE, stderr = sp.PIPE)
 		out, err = p.communicate()
 		if err:
-			print("Error: ", err.strip())
+			 logger.error("Error: ", err.strip())
 	except OSError as e:
-		print("Error: " + e.strerror)
+		 logger.error("Error: " + e.strerror)
 	except:
-		print("Error: ", sys.exc_info()[0])
+		 logger.error("Error: ", sys.exc_info()[0])
 	# p_status = p.wait()
 	# print("Command output : " + output
 	# print("Command exit status/return code : ", p_status
@@ -46,9 +48,9 @@ def get_state(object, state, component):
 			# print(d["InstanceId"] )
 			# print(d["InstanceState"]["Name"] )
 			if (d["InstanceState"]["Name"] == state):
-				print (id + " in state " + d["InstanceState"]["Name"])
+				 logger.info(id + " in state " + d["InstanceState"]["Name"])
 			else:
-				print(id + " not " + state + " yet")
+				logger.info(id + " not " + state + " yet")
 				retval = False				
 
 	elif (component == "cdh"):
@@ -59,34 +61,38 @@ def get_state(object, state, component):
 			if "CDSW" in n:
 				continue
 			if st == state:
-				print(n + " in state " + st)
+				logger.info(n + " in state " + st)
 			else:
-				print(n + " not " + state + " yet")
+				logger.info(n + " not " + state + " yet")
 				retval = False
-	print "===================================="
+	logger.info("====================================")
 	return retval
 	
-def run_process(farg, action, state, component):
+def run_process(farg, action, state, component, logger):
 	p = multiprocessing.Process(target=do_work, args=(farg, action, component))
 	p.start()
 	
-	timeout = time.time() + 60*10 # 10 minutes
+	timeout = time.time() + 60*15 # 15 minutes
 	# timeout = time.time() + 10
 	while True:
-		if ((get_state(farg, state, component) == True ) or (time.time() > timeout)):
-			print("Everything ok with " + component)
+		if (get_state(farg, state, component) == True):
+			logger.info("Everything ok with " + component)
 			p.terminate()
 			break
+		if (time.time() > timeout):
+			logger.error("ERROR: timeout reached ")
+			p.terminate()
+			sys.exit(1)
 		time.sleep(10)
 		# time.sleep(1)
 	# p.join()
 
-def run_aws(action, aws_st):
+def run_aws(action, aws_st, logger):
 	component = "aws"
-	aws_cdh_inst = ["i-0ecf8e69d51828c41", "i-0fef039957a700c95", "i-00b8e90d0b3cf58a5", "i-03821bf0a5fb2b34b", "i-03c6d6779ada0806c", "i-0e8d0ffdb9e11fe00", "i-0c7750a3b6cb107fa"] # last one should be cm
-	run_process(aws_cdh_inst, action, aws_st, "aws")
+	aws_cdh_inst = ["i-0c7750a3b6cb107fa", "i-0ecf8e69d51828c41", "i-0fef039957a700c95", "i-00b8e90d0b3cf58a5", "i-03821bf0a5fb2b34b", "i-03c6d6779ada0806c", "i-0e8d0ffdb9e11fe00"]
+	run_process(aws_cdh_inst, action, aws_st, "aws", logger)
 
-def run_cdh(action, cdh_st):
+def run_cdh(action, cdh_st, logger):
 	component = "cdh"
 	cfg = ConfigParser.ConfigParser()
 	cfg.read("cdh.cfg")
@@ -101,25 +107,25 @@ def run_cdh(action, cdh_st):
 	api = ApiResource(cmhost, username=user, password=passw, ssl_context = context, use_tls = True)	
 	allc = api.get_all_clusters()
 	c = allc[0]
-	run_process(c, action, cdh_st, component)
+	run_process(c, action, cdh_st, component, logger)
 
-def do_work(object, action, component):
+def do_work(object, action, component, logger):
 	if (component == "cdh"):
 		cluster = object
 		if (action == "start"):
-			print "Starting cluster"
+			logger.info("Starting cluster")
 			cluster.start().wait()
 		elif (action == "stop"):
-			print "Stopping cluster"
+			logger.info("Stopping cluster")
 			cluster.stop().wait()
 	elif (component == "aws"):
 		aws_cdh_inst = object
 		if (action == "start"):
-			print "Starting AWS instances"
+			logger.info("Starting AWS instances")
 			for id in aws_cdh_inst:
 				run_cmd(["aws", "--profile", "director-aws-user", "ec2", "start-instances", "--instance-ids", id])
 		elif (action == "stop"):
-			print "Stopping AWS instances"
+			logger.info("Stopping AWS instances")
 			for id in aws_cdh_inst:
 				run_cmd(["aws", "--profile", "director-aws-user", "ec2", "stop-instances", "--instance-ids", id])	   
 
@@ -128,23 +134,28 @@ def main():
 	parser.add_argument("action", help="stop or start the cluster")
 	args = parser.parse_args()
 	action = args.action
-	
+	logging.config.fileConfig('logging.conf')
+	logger = logging.getLogger('aws_cm_actions')
+
+
 	if ((action != "start") and (action != "stop")):
 		print ("Action can be either start or stop")
 		sys.exit(1)
+	
+	logger.info ("Script started")
+	# if (action == "start"):
+		# cdh_st = "STARTED"
+		# aws_st = "running"
+		# run_aws(action, aws_st, logger)
+		# time.sleep(180)
+		# run_cdh(action, cdh_st, logger)
+	# elif (action == "stop"):
+		# cdh_st = "STOPPED"
+		# aws_st = "stopped"
+		# run_cdh(action, cdh_st, logger)
+		# run_aws(action, aws_st, logger)
+	logger.info ("Script ended")
 
-	if (action == "start"):
-		cdh_st = "STARTED"
-		aws_st = "running"
-		run_aws(action, aws_st)
-		time.sleep(300)
-		run_cdh(action, cdh_st)
-	elif (action == "stop"):
-		cdh_st = "STOPPED"
-		aws_st = "stopped"
-		run_cdh(action, cdh_st)
-		run_aws(action, aws_st)
-		
 if __name__ == "__main__":
 	main()
 	
