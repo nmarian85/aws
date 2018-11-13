@@ -36,10 +36,10 @@ def run_cmd(cmd, logger):
 	# print("Command exit status/return code : ", p_status
 	return out.decode("utf-8")
 
-def get_state(object, state, component):
+def get_state(object, state, component, logger):
 	retval = True
 	if (component == "aws"):
-		out = run_cmd(["aws", "--profile", "director-aws-user", "ec2", "describe-instance-status", "--include-all-instances"])
+		out = run_cmd(["aws", "--profile", "director-aws-user", "ec2", "describe-instance-status", "--include-all-instances"], logger)
 		instdict = json.loads(out)
 		for d in instdict["InstanceStatuses"]:
 			id = d["InstanceId"]
@@ -69,13 +69,13 @@ def get_state(object, state, component):
 	return retval
 	
 def run_process(farg, action, state, component, logger):
-	p = multiprocessing.Process(target=do_work, args=(farg, action, component))
+	p = multiprocessing.Process(target=do_work, args=(farg, action, component, logger))
 	p.start()
 	
 	timeout = time.time() + 60*15 # 15 minutes
 	# timeout = time.time() + 10
 	while True:
-		if (get_state(farg, state, component) == True):
+		if (get_state(farg, state, component, logger) == True):
 			logger.info("Everything ok with " + component)
 			p.terminate()
 			break
@@ -123,11 +123,11 @@ def do_work(object, action, component, logger):
 		if (action == "start"):
 			logger.info("Starting AWS instances")
 			for id in aws_cdh_inst:
-				run_cmd(["aws", "--profile", "director-aws-user", "ec2", "start-instances", "--instance-ids", id])
+				run_cmd(["aws", "--profile", "director-aws-user", "ec2", "start-instances", "--instance-ids", id], logger)
 		elif (action == "stop"):
 			logger.info("Stopping AWS instances")
 			for id in aws_cdh_inst:
-				run_cmd(["aws", "--profile", "director-aws-user", "ec2", "stop-instances", "--instance-ids", id])	   
+				run_cmd(["aws", "--profile", "director-aws-user", "ec2", "stop-instances", "--instance-ids", id], logger)	   
 
 def main():
 	parser = argparse.ArgumentParser()
@@ -139,21 +139,21 @@ def main():
 
 
 	if ((action != "start") and (action != "stop")):
-		print ("Action can be either start or stop")
+		logger.error ("Action can be either start or stop")
 		sys.exit(1)
 	
 	logger.info ("Script started")
-	# if (action == "start"):
-		# cdh_st = "STARTED"
-		# aws_st = "running"
-		# run_aws(action, aws_st, logger)
-		# time.sleep(180)
-		# run_cdh(action, cdh_st, logger)
-	# elif (action == "stop"):
-		# cdh_st = "STOPPED"
-		# aws_st = "stopped"
-		# run_cdh(action, cdh_st, logger)
-		# run_aws(action, aws_st, logger)
+	if (action == "start"):
+		cdh_st = "STARTED"
+		aws_st = "running"
+		run_aws(action, aws_st, logger)
+		time.sleep(180)
+		run_cdh(action, cdh_st, logger)
+	elif (action == "stop"):
+		cdh_st = "STOPPED"
+		aws_st = "stopped"
+		run_cdh(action, cdh_st, logger)
+		run_aws(action, aws_st, logger)
 	logger.info ("Script ended")
 
 if __name__ == "__main__":
