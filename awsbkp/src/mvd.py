@@ -15,7 +15,10 @@ import run
 def mvd(dir, dst_dir, logger):
 	logger.info("Moving directory " + dir + " to " + dst_dir)
 	out, ret = run.run_cmd(["rsync", "-a", dir, dst_dir], logger)
+	for l in out.splitlines():
+		logger.info(l)
 	if(ret == 0):
+		logger.info("Removing directory " + dir)
 		out, ret = run.run_cmd(["rm", "-rf", dir], logger)
 	# out = run.run_cmd(["rsync", "-a", "--remove-source-files", "--dry-run", dir, dst_dir], logger)
 	# out = run.run_cmd(["rsync", "-a", "--remove-source-files", dir, dst_dir], logger)
