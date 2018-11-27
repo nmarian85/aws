@@ -19,3 +19,7 @@ def run_cmd(cmd, logger):
 def get_dirs(src_path, s_d, r_d, logger):
 	out, ret = run_cmd(["find", src_path, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-newermt", s_d, "!", "-newermt", r_d], logger)
 	return out, ret
+
+def get_files(src_path, s_d, r_d, logger):
+	out, ret = run_cmd(["find", src_path, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-newermt", s_d, "!", "-newermt", r_d], logger)
+	return out, ret
