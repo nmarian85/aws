@@ -68,8 +68,5 @@ def main():
 			logger.info("Removing tar file " + file)
 			out, ret = run.run_cmd(["rm", "-f", file], logger)
 
-			# logger.info("Removing directory " + l)
-			# out, ret = run.run_cmd(["rm", "-rf", l], logger)
-
 if __name__ == "__main__":
 	main()
