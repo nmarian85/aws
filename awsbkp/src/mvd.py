@@ -80,10 +80,9 @@ def main():
 		
 		if(cmp(fmd5, abs_path_tar_fmd5)): 
 			logger.info("md5s match for all " + str(len(fmd5.keys())) + " files so removing source directory " + dir)
+			out, ret = run.run_cmd(["rm", "-rf", dir], logger)
 		else:
 			logger.info("md5s for files dont't match")
-
-		# # out, ret = run.run_cmd(["rm", "-rf", dir], logger)
 
 if __name__ == "__main__":
 	main()
