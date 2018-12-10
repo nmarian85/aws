@@ -1,5 +1,7 @@
 import sys
 import subprocess as sp
+import hashlib
+
 
 def run_cmd(cmd, logger):
 	try:
@@ -14,7 +16,7 @@ def run_cmd(cmd, logger):
 	# p_status = p.wait()
 	# print("Command output : " + output
 	# print("Command exit status/return code : ", p_status
-	return out.decode("utf-8"), p.returncode
+	return out.decode("ISO-8859-1"), p.returncode
 
 def get_dirs(src_path, s_d, r_d, logger):
 	out, ret = run_cmd(["find", src_path, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-newermt", s_d, "!", "-newermt", r_d], logger)
@@ -23,3 +25,10 @@ def get_dirs(src_path, s_d, r_d, logger):
 def get_files(src_path, s_d, r_d, logger):
 	out, ret = run_cmd(["find", src_path, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-newermt", s_d, "!", "-newermt", r_d], logger)
 	return out, ret
+
+def calc_md5(f, logger):
+	with open(f, "rb") as binary_file:
+		data = binary_file.read()
+	md5 = hashlib.md5(data).hexdigest()
+	# logger.info("md5sum of " + f + " is " + str(md5))
+	return md5

@@ -17,65 +17,40 @@ import hashlib
 import re
 import boto3
 from boto3.s3.transfer import TransferConfig
-from filechunkio import FileChunkIO
+from io import StringIO, BytesIO
+import hexdump
+import binascii
 
-def multi_part_upload_with_s3(f, s3, bucket, s3_ddir, logger):
-	config = TransferConfig(multipart_threshold=1024 * 25, max_concurrency=10, multipart_chunksize=1024 * 25, use_threads=True)
-#	bucket = dst_path.split("/")[0]
-#	s3_dir = dst_path[dst_path.index("/") + 1:]	
-	s3_path = os.path.join(s3_ddir, os.path.basename(f))
-	logger.info("Copying  " + f + " to " + s3_path)
-	s3.meta.client.upload_file(Filename=f, Bucket=bucket, Key=s3_path, Config=config)
-#l                            ExtraArgs={'ACL': 'public-read', 'ContentType': 'text/pdf'},
-#                            Config=config,
-#                            Callback=ProgressPercentage(file_path)
-#                            )
+def upload(s3, mpu_id, bucket, fpath, s3_fpath, part_bytes):
+	parts = []
+	with open(fpath, "rb") as f:
+		i = 1
+		while True:
+			data = f.read(part_bytes)
+			if not len(data):
+				break
+			part = s3.meta.client.upload_part(Body=data, Bucket=bucket, Key=s3_fpath, UploadId=mpu_id, PartNumber=i)
+			parts.append({"PartNumber": i, "ETag": part["ETag"]})
+			i += 1
+	return parts
 
-def calc_md5(f, logger):
-	with open(f, "rb") as binary_file:
-		data = binary_file.read()
-	md5 = hashlib.md5(data).hexdigest()
-	logger.info("md5sum of " + f + " is " + str(md5))
-	return md5
+def multi_part_upload_with_s3(fpath, s3, bucket, s3_ddir):
+	s3_fpath = os.path.join(s3_ddir, os.path.basename(fpath))
+	part_bytes = int(15e6) # split in 15mb chunks
+	mpu = s3.meta.client.create_multipart_upload(Bucket=bucket, Key=s3_fpath)
+	mpu_id = mpu["UploadId"]
+	parts = upload(s3, mpu_id, bucket, fpath, s3_fpath, part_bytes)
+	s3.meta.client.complete_multipart_upload(Bucket=bucket, Key=s3_fpath, UploadId=mpu_id, MultipartUpload={"Parts": parts})
+	etags = [ elem["ETag"] for elem in parts]
+	return etags
 
-def get_etag(s3_f, bucket, logger):
-#aws s3api head-object --bucket s3-pdapilot-storage --key s3-scrappy-backup/edeka_product_one_2018_11_25__00.tgz
-	s3md5 = ""
-	out, ret = run.run_cmd(["aws", "s3api", "head-object", "--bucket", bucket, "--key", s3_f], logger)
-	for l in out.splitlines():
-		logger.info(l)
-		cols = l.split(":")
-		if (len(cols) >= 2 and "ETag" in l):
-			s3md5 = cols[1].replace('\\','').replace('"','').replace(' ','')
-	return s3md5
 
-def mvs3(fname, dst_dir, logger):
-	bucket = dst_dir.split("/")[0]
-	folder = dst_dir.split("/")[1]
-	basefname = os.path.basename(fname)
-	s3md5 = ""
-	
-	with open(fname, "rb") as binary_file:
-		data = binary_file.read()
-
-	md5 = hashlib.md5(data).hexdigest()
-	
-	logger.info("md5sum of " + fname + " is " + str(md5))
-	logger.info("Copying  " + fname + " to " + dst_dir)
-	
-	# out, ret = run.run_cmd(["aws", "s3api", "put-object", "--bucket", bucket, "--key", folder + "/" + basefname, "--body", fname, "--metadata", "md5chksum=" + md5, "--content-md5", md5  ], logger)
-	out, ret = run.run_cmd(["aws", "s3api", "put-object", "--bucket", bucket, "--key", folder + "/" + basefname, "--body", fname], logger)
-
-	for l in out.splitlines():
-		logger.info(l)
-		cols = l.split(":")
-		if (len(cols) >= 2 and "ETag" in l):
-			s3md5 = cols[1].replace('\\','').replace('"','').replace(' ','')
-
-	if (s3md5 == md5):
-		logger.info("md5 and ETag match")
-		return 0
-	return -1
+def find_etag(s3, bucket, s3_fpath):
+	try:
+		resp = s3.meta.client.head_object(Bucket=bucket, Key=s3_fpath)
+		return resp['ETag'].strip('"')
+	except:
+		logger.error("Exception occurred while calculating S3 Etag: ", sys.exc_info()[0])
 
 def main():
 	code_dir = os.path.join(os.environ['HOME'], "aws", "awsbkp")
@@ -97,13 +72,25 @@ def main():
 	
 	out, ret = run.get_files(sdir, since_d, until_d, logger)
 
+	#AWS etag algorithm : xxd -r -p f1 | md5sum where f1 is a file containing all the hashes of the parts
 	for f in out.splitlines():
-		fmd5 = calc_md5(f, logger)
-		multi_part_upload_with_s3(f, s3, bucket, s3_ddir, logger)
-		s3_fmd5 = get_etag(os.path.join(s3_ddir, os.path.basename(f)), bucket, logger)
-		print(s3_fmd5)
-	#	ret = mvs3(file, dst_path, logger)
-	#	if(ret == 0):
+		logger.info("Started copying " + f + " to " + s3_ddir)
+		etags = multi_part_upload_with_s3(f, s3, bucket, s3_ddir)
+		logger.info("Ended copying " + f)
+
+		logger.info("Calculating file ETag based on parts ETags " + f)
+		xxd_f = os.path.join("/tmp", os.path.basename(f))
+		with open(xxd_f, "w") as outf:
+			for i, etag in enumerate(etags):
+				outf.write(etag.strip('\"'))
+		out, ret = run.run_cmd(["xxd", "-r", "-p", xxd_f], logger)
+		calc_etag = hashlib.md5(out.encode("ISO-8859-1")).hexdigest() + "-" + str(len(etags))
+		logger.info("Calculated ETag for " + f + " is " + calc_etag)
+		s3_fpath = os.path.join(s3_ddir, os.path.basename(f))
+		s3_etag = find_etag(s3, bucket, s3_fpath)
+		logger.info("ETag returned by S3 API for " + s3_fpath + " is " + s3_etag)
+		if(s3_etag == calc_etag):
+			logger.info("Calculated ETag and ETag returned by S3 API match")
 	#		logger.info("Removing tar file " + file)
 	#		out, ret = run.run_cmd(["rm", "-f", file], logger)
 
