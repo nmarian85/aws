@@ -36,7 +36,7 @@ def upload(s3, mpu_id, bucket, fpath, s3_fpath, part_bytes):
 
 def multi_part_upload_with_s3(fpath, s3, bucket, s3_ddir):
 	s3_fpath = os.path.join(s3_ddir, os.path.basename(fpath))
-	part_bytes = int(15e6) # split in 15mb chunks
+	part_bytes = int(50e6) # split in 50mb chunks
 	mpu = s3.meta.client.create_multipart_upload(Bucket=bucket, Key=s3_fpath)
 	mpu_id = mpu["UploadId"]
 	parts = upload(s3, mpu_id, bucket, fpath, s3_fpath, part_bytes)
@@ -86,13 +86,17 @@ def main():
 		out, ret = run.run_cmd(["xxd", "-r", "-p", xxd_f], logger)
 		calc_etag = hashlib.md5(out.encode("ISO-8859-1")).hexdigest() + "-" + str(len(etags))
 		logger.info("Calculated ETag for " + f + " is " + calc_etag)
+		
+		if os.path.exists(xxd_f):
+			os.remove(xxd_f)
+		
 		s3_fpath = os.path.join(s3_ddir, os.path.basename(f))
 		s3_etag = find_etag(s3, bucket, s3_fpath)
 		logger.info("ETag returned by S3 API for " + s3_fpath + " is " + s3_etag)
 		if(s3_etag == calc_etag):
 			logger.info("Calculated ETag and ETag returned by S3 API match")
-	#		logger.info("Removing tar file " + file)
-	#		out, ret = run.run_cmd(["rm", "-f", file], logger)
-
+			logger.info("Removing tar file " + f)
+			out, ret = run.run_cmd(["rm", "-f", f], logger)
+		logger.info("==========================================================")
 if __name__ == "__main__":
 	main()

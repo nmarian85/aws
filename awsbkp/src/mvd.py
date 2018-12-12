@@ -27,9 +27,7 @@ def getlsmd5(dir):
 	for root, dirs, files in os.walk(dir):  
 		for filename in files:
 			fpath = os.path.join(root, filename)
-			with open(fpath, "rb") as fb:
-				data = fb.read()
-				fmd5[fpath] = hashlib.md5(data).hexdigest()
+			fmd5[fpath] = calc_fmd5(fpath)
 	return fmd5
 	
 def gettarmd5(tarf):
@@ -59,13 +57,14 @@ def main():
 	src_path = config['DEFAULT']['src_path']
 	dst_path = config['DEFAULT']['dst_path']
 	
-	start_day = config['DEFAULT']['start_day']
-	end_day = config['DEFAULT']['end_day']
+	since = config['DEFAULT']['since']
+	until = config['DEFAULT']['until']
 
-	start = eval(start_day)
-	end = eval(end_day)
+
+	since_d = eval(since)
+	until_d = eval(until)
 	
-	out, ret = run.get_dirs(src_path, start, end, logger)
+	out, ret = run.get_dirs(src_path, since_d, until_d, logger)
 	
 	for dir in out.splitlines():
 		fmd5 = getlsmd5(dir)
@@ -80,7 +79,7 @@ def main():
 		
 		if(cmp(fmd5, abs_path_tar_fmd5)): 
 			logger.info("md5s match for all " + str(len(fmd5.keys())) + " files so removing source directory " + dir)
-			out, ret = run.run_cmd(["rm", "-rf", dir], logger)
+			# out, ret = run.run_cmd(["rm", "-rf", dir], logger)
 		else:
 			logger.info("md5s for files dont't match")
 

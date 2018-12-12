@@ -26,7 +26,7 @@ def get_files(src_path, s_d, r_d, logger):
 	out, ret = run_cmd(["find", src_path, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-newermt", s_d, "!", "-newermt", r_d], logger)
 	return out, ret
 
-def calc_md5(f, logger):
+def calc_fmd5(f):
 	with open(f, "rb") as binary_file:
 		data = binary_file.read()
 	md5 = hashlib.md5(data).hexdigest()
