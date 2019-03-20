@@ -95,7 +95,7 @@ def run_aws(action, aws_st, logger):
 def run_cdh(action, cdh_st, logger):
 	component = "cdh"
 	cfg = ConfigParser.ConfigParser()
-	cfg.read("cdh.cfg")
+	cfg.read("/home/ec2-user/aws/cdh.cfg")
 	
 	cmhost = cfg.get("CM", "host")
 	user = cfg.get("CM", "username")
@@ -134,7 +134,7 @@ def main():
 	parser.add_argument("action", help="stop or start the cluster")
 	args = parser.parse_args()
 	action = args.action
-	logging.config.fileConfig('logging.conf')
+	logging.config.fileConfig('/home/ec2-user/aws/logging.conf')
 	logger = logging.getLogger('aws_cm_actions')
 
 

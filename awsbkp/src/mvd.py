@@ -27,7 +27,7 @@ def getlsmd5(dir):
 	for root, dirs, files in os.walk(dir):  
 		for filename in files:
 			fpath = os.path.join(root, filename)
-			fmd5[fpath] = calc_fmd5(fpath)
+			fmd5[fpath] = run.calc_fmd5(fpath)
 	return fmd5
 	
 def gettarmd5(tarf):
@@ -54,8 +54,8 @@ def main():
 	config = configparser.RawConfigParser()
 	config.read(os.path.join(sdir, "conf", "mvd.conf"))
 	
-	src_path = config['DEFAULT']['src_path']
-	dst_path = config['DEFAULT']['dst_path']
+	sdir = config['DEFAULT']['sdir']
+	ddir = config['DEFAULT']['ddir']
 	
 	since = config['DEFAULT']['since']
 	until = config['DEFAULT']['until']
@@ -64,24 +64,24 @@ def main():
 	since_d = eval(since)
 	until_d = eval(until)
 	
-	out, ret = run.get_dirs(src_path, since_d, until_d, logger)
+	out, ret = run.get_dirs(sdir, since_d, until_d, logger)
 	
 	for dir in out.splitlines():
 		fmd5 = getlsmd5(dir)
 		# for k, v in fmd5.items():
 			# print(k + " " + v)
-		tarf = tard(dir, dst_path, logger)
+		tarf = tard(dir, ddir, logger)
 		tar_fmd5 = gettarmd5(tarf)
 		
 		abs_path_tar_fmd5 = dict()
 		for k, v in tar_fmd5.items():
-			abs_path_tar_fmd5[os.path.join(src_path, k)] = tar_fmd5[k]
+			abs_path_tar_fmd5[os.path.join(sdir, k)] = tar_fmd5[k]
 		
 		if(cmp(fmd5, abs_path_tar_fmd5)): 
 			logger.info("md5s match for all " + str(len(fmd5.keys())) + " files so removing source directory " + dir)
-			# out, ret = run.run_cmd(["rm", "-rf", dir], logger)
+			out, ret = run.run_cmd(["rm", "-rf", dir], logger)
 		else:
 			logger.info("md5s for files dont't match")
-
+	logger.info("Script ended")
 if __name__ == "__main__":
 	main()

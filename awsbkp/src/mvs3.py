@@ -98,5 +98,6 @@ def main():
 			logger.info("Removing tar file " + f)
 			out, ret = run.run_cmd(["rm", "-f", f], logger)
 		logger.info("==========================================================")
+	logger.info("Script ended")
 if __name__ == "__main__":
 	main()
